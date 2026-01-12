@@ -272,8 +272,8 @@
 <body>
     <div class="container">
         <div class="header">
-            <h1>Tâches Wajih  </h1>
-            <button class="add-task-btn" onclick="openModal()">+</button>
+            <h1> Tâches Wajih  </h1>
+            <button class="add-task-btn" onclick="openModal()">+ Nouvelle tâche</button>
         </div>
 
         <div class="board">
@@ -321,11 +321,11 @@
         let draggedElement = null;
         let draggedTaskId = null;
 
-        async function loadTasks() {
+        function loadTasks() {
             try {
-                const result = await window.storage.get('kanban-tasks', true);
-                if (result && result.value) {
-                    tasks = JSON.parse(result.value);
+                const storedTasks = localStorage.getItem('kanban-tasks');
+                if (storedTasks) {
+                    tasks = JSON.parse(storedTasks);
                     renderTasks();
                 }
             } catch (error) {
@@ -334,11 +334,12 @@
             }
         }
 
-        async function saveTasks() {
+        function saveTasks() {
             try {
-                await window.storage.set('kanban-tasks', JSON.stringify(tasks), true);
+                localStorage.setItem('kanban-tasks', JSON.stringify(tasks));
             } catch (error) {
                 console.error('Erreur de sauvegarde:', error);
+                alert('Impossible de sauvegarder les tâches. Votre navigateur bloque peut-être le stockage local.');
             }
         }
 
@@ -351,7 +352,7 @@
             document.getElementById('taskForm').reset();
         }
 
-        document.getElementById('taskForm').addEventListener('submit', async function(e) {
+        document.getElementById('taskForm').addEventListener('submit', function(e) {
             e.preventDefault();
             
             const task = {
@@ -364,15 +365,15 @@
             };
 
             tasks.push(task);
-            await saveTasks();
+            saveTasks();
             renderTasks();
             closeModal();
         });
 
-        async function deleteTask(id) {
+        function deleteTask(id) {
             if (confirm('Supprimer cette tâche ?')) {
                 tasks = tasks.filter(t => t.id !== id);
-                await saveTasks();
+                saveTasks();
                 renderTasks();
             }
         }
@@ -430,7 +431,7 @@
                     this.classList.remove('drag-over');
                 });
 
-                container.addEventListener('drop', async function(e) {
+                container.addEventListener('drop', function(e) {
                     e.preventDefault();
                     this.classList.remove('drag-over');
                     
@@ -440,7 +441,7 @@
                         
                         if (task && task.status !== newStatus) {
                             task.status = newStatus;
-                            await saveTasks();
+                            saveTasks();
                             renderTasks();
                         }
                     }
