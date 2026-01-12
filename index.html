@@ -193,6 +193,22 @@
             font-weight: 700;
             margin-bottom: 20px;
             color: #333;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .close-modal {
+            background: none;
+            border: none;
+            font-size: 28px;
+            color: #999;
+            cursor: pointer;
+            line-height: 1;
+        }
+
+        .close-modal:hover {
+            color: #333;
         }
 
         .form-group {
@@ -272,8 +288,8 @@
 <body>
     <div class="container">
         <div class="header">
-            <h1> Tâches Wajih  </h1>
-            <button class="add-task-btn" onclick="openModal()">+ Nouvelle tâche</button>
+            <h1> Tâches Wajih</h1>
+            <button class="add-task-btn" onclick="openModal()"> + </button>
         </div>
 
         <div class="board">
@@ -294,8 +310,12 @@
 
     <div class="modal" id="taskModal">
         <div class="modal-content">
-            <div class="modal-header">Nouvelle tâche</div>
+            <div class="modal-header">
+                <span id="modalTitle">Nouvelle tâche</span>
+                <button class="close-modal" onclick="closeModal()">&times;</button>
+            </div>
             <form id="taskForm">
+                <input type="hidden" id="taskId">
                 <div class="form-group">
                     <label for="taskTitle">Titre *</label>
                     <input type="text" id="taskTitle" required>
@@ -308,9 +328,17 @@
                     <label for="taskAuthor">Créé par</label>
                     <input type="text" id="taskAuthor" placeholder="Votre nom">
                 </div>
+                <div class="form-group">
+                    <label for="taskStatus">Statut</label>
+                    <select id="taskStatus" style="width: 100%; padding: 10px; border: 2px solid #e0e0e0; border-radius: 6px; font-size: 14px;">
+                        <option value="todo">À faire</option>
+                        <option value="in-progress">En cours</option>
+                        <option value="done">Fait</option>
+                    </select>
+                </div>
                 <div class="modal-actions">
                     <button type="button" class="btn btn-secondary" onclick="closeModal()">Annuler</button>
-                    <button type="submit" class="btn btn-primary">Créer</button>
+                    <button type="submit" class="btn btn-primary" id="submitBtn">Créer</button>
                 </div>
             </form>
         </div>
@@ -344,6 +372,26 @@
         }
 
         function openModal() {
+            document.getElementById('modalTitle').textContent = 'Nouvelle tâche';
+            document.getElementById('submitBtn').textContent = 'Créer';
+            document.getElementById('taskForm').reset();
+            document.getElementById('taskId').value = '';
+            document.getElementById('taskStatus').parentElement.style.display = 'none';
+            document.getElementById('taskModal').classList.add('active');
+        }
+
+        function openEditModal(taskId) {
+            const task = tasks.find(t => t.id === taskId);
+            if (!task) return;
+
+            document.getElementById('modalTitle').textContent = 'Modifier la tâche';
+            document.getElementById('submitBtn').textContent = 'Enregistrer';
+            document.getElementById('taskId').value = task.id;
+            document.getElementById('taskTitle').value = task.title;
+            document.getElementById('taskDescription').value = task.description;
+            document.getElementById('taskAuthor').value = task.author;
+            document.getElementById('taskStatus').value = task.status;
+            document.getElementById('taskStatus').parentElement.style.display = 'block';
             document.getElementById('taskModal').classList.add('active');
         }
 
@@ -355,16 +403,30 @@
         document.getElementById('taskForm').addEventListener('submit', function(e) {
             e.preventDefault();
             
-            const task = {
-                id: Date.now(),
-                title: document.getElementById('taskTitle').value,
-                description: document.getElementById('taskDescription').value,
-                author: document.getElementById('taskAuthor').value || 'Anonyme',
-                status: 'todo',
-                createdAt: new Date().toLocaleDateString('fr-FR')
-            };
+            const taskId = document.getElementById('taskId').value;
+            
+            if (taskId) {
+                // Edit existing task
+                const task = tasks.find(t => t.id === parseInt(taskId));
+                if (task) {
+                    task.title = document.getElementById('taskTitle').value;
+                    task.description = document.getElementById('taskDescription').value;
+                    task.author = document.getElementById('taskAuthor').value || 'Anonyme';
+                    task.status = document.getElementById('taskStatus').value;
+                }
+            } else {
+                // Create new task
+                const task = {
+                    id: Date.now(),
+                    title: document.getElementById('taskTitle').value,
+                    description: document.getElementById('taskDescription').value,
+                    author: document.getElementById('taskAuthor').value || 'Anonyme',
+                    status: 'todo',
+                    createdAt: new Date().toLocaleDateString('fr-FR')
+                };
+                tasks.push(task);
+            }
 
-            tasks.push(task);
             saveTasks();
             renderTasks();
             closeModal();
@@ -394,9 +456,16 @@
                     ${task.description ? `<div class="task-description">${task.description}</div>` : ''}
                     <div class="task-meta">
                         <span>👤 ${task.author} • ${task.createdAt}</span>
-                        <button class="delete-btn" onclick="deleteTask(${task.id})">🗑️</button>
+                        <button class="delete-btn" onclick="event.stopPropagation(); deleteTask(${task.id})">🗑️</button>
                     </div>
                 `;
+
+                // Click to edit
+                taskEl.addEventListener('click', function(e) {
+                    if (!e.target.classList.contains('delete-btn')) {
+                        openEditModal(parseInt(this.dataset.id));
+                    }
+                });
 
                 taskEl.addEventListener('dragstart', function(e) {
                     draggedElement = this;
