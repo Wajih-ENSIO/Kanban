@@ -1,170 +1,218 @@
-<script type="module">
-    // 1. Import Firebase SDKs
-    import { initializeApp } from "https://www.gstatic.com/firebasejs/12.8.0/firebase-app.js";
-    import { getFirestore, doc, onSnapshot, setDoc } from "https://www.gstatic.com/firebasejs/12.8.0/firebase-firestore.js";
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Kanban Board</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); min-height: 100vh; padding: 20px; }
+        .container { max-width: 1400px; margin: 0 auto; }
+        .header { background: white; padding: 20px 30px; border-radius: 12px; margin-bottom: 30px; display: flex; justify-content: space-between; align-items: center; box-shadow: 0 4px 6px rgba(0,0,0,0.1); }
+        .add-task-btn { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; border: none; padding: 12px 24px; border-radius: 8px; font-weight: 600; cursor: pointer; }
+        .board { display: grid; grid-template-columns: repeat(3, 1fr); gap: 20px; }
+        .column { background: rgba(255, 255, 255, 0.95); border-radius: 12px; padding: 20px; min-height: 500px; }
+        .column-header { font-size: 18px; font-weight: 700; margin-bottom: 20px; padding-bottom: 15px; border-bottom: 3px solid #e0e0e0; }
+        .tasks-container { min-height: 400px; }
+        .task { background: white; padding: 15px; margin-bottom: 12px; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); cursor: grab; border-left: 4px solid #667eea; }
+        .task.dragging { opacity: 0.3; }
+        .task-title { font-weight: 600; color: #333; }
+        .task-meta { display: flex; justify-content: space-between; font-size: 12px; color: #999; margin-top: 10px; }
+        .delete-btn { background: #ef4444; color: white; border: none; padding: 4px 8px; border-radius: 4px; cursor: pointer; }
+        .modal { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); z-index: 1000; align-items: center; justify-content: center; }
+        .modal.active { display: flex; }
+        .modal-content { background: white; padding: 30px; border-radius: 12px; width: 90%; max-width: 500px; }
+        .form-group { margin-bottom: 15px; }
+        input, textarea, select { width: 100%; padding: 10px; border: 2px solid #e0e0e0; border-radius: 6px; }
+        .modal-actions { display: flex; gap: 10px; justify-content: flex-end; margin-top: 20px; }
+        @media (max-width: 968px) { .board { grid-template-columns: 1fr; } }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>Tâches Wajih</h1>
+            <button class="add-task-btn" onclick="openModal()"> + </button>
+        </div>
 
-    // 2. Your specific Configuration
-    const firebaseConfig = {
-        apiKey: "AIzaSyCLtVFMtBFYjKHqsKIk-RFDbEE9B3szs_Q",
-        authDomain: "kanban-board-c7048.firebaseapp.com",
-        projectId: "kanban-board-c7048",
-        storageBucket: "kanban-board-c7048.firebasestorage.app",
-        messagingSenderId: "834915286423",
-        appId: "1:834915286423:web:043c8d49d0a60568f758d2"
-    };
+        <div class="board">
+            <div class="column" data-status="todo">
+                <div class="column-header" style="color: #3b82f6; border-bottom-color: #3b82f6;">À faire</div>
+                <div class="tasks-container"></div>
+            </div>
+            <div class="column" data-status="in-progress">
+                <div class="column-header" style="color: #f59e0b; border-bottom-color: #f59e0b;">En cours</div>
+                <div class="tasks-container"></div>
+            </div>
+            <div class="column" data-status="done">
+                <div class="column-header" style="color: #10b981; border-bottom-color: #10b981;">Fait</div>
+                <div class="tasks-container"></div>
+            </div>
+        </div>
+    </div>
 
-    // 3. Initialize Firebase & Firestore
-    const app = initializeApp(firebaseConfig);
-    const db = getFirestore(app);
-    const boardDocRef = doc(db, "kanban", "shared-board");
+    <div class="modal" id="taskModal">
+        <div class="modal-content">
+            <h2 id="modalTitle" style="margin-bottom: 20px;">Nouvelle tâche</h2>
+            <form id="taskForm">
+                <input type="hidden" id="taskId">
+                <div class="form-group">
+                    <label>Titre *</label>
+                    <input type="text" id="taskTitle" required>
+                </div>
+                <div class="form-group">
+                    <label>Description</label>
+                    <textarea id="taskDescription"></textarea>
+                </div>
+                <div class="form-group">
+                    <label>Créé par</label>
+                    <input type="text" id="taskAuthor" placeholder="Votre nom">
+                </div>
+                <div class="form-group" id="statusGroup">
+                    <label>Statut</label>
+                    <select id="taskStatus">
+                        <option value="todo">À faire</option>
+                        <option value="in-progress">En cours</option>
+                        <option value="done">Fait</option>
+                    </select>
+                </div>
+                <div class="modal-actions">
+                    <button type="button" onclick="closeModal()" style="padding:10px; border:none; cursor:pointer;">Annuler</button>
+                    <button type="submit" id="submitBtn" style="padding:10px; background:#667eea; color:white; border:none; border-radius:6px; cursor:pointer;">Créer</button>
+                </div>
+            </form>
+        </div>
+    </div>
 
-    let tasks = [];
-    let draggedTaskId = null;
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/12.8.0/firebase-app.js";
+        import { getFirestore, doc, onSnapshot, setDoc } from "https://www.gstatic.com/firebasejs/12.8.0/firebase-firestore.js";
 
-    // --- REAL-TIME SYNC ---
-    // This function watches the database. If anyone changes a task, 
-    // it updates on everyone's screen immediately.
-    function listenToTasks() {
-        onSnapshot(boardDocRef, (doc) => {
-            if (doc.exists()) {
-                tasks = doc.data().tasks || [];
-            } else {
-                tasks = [];
+        const firebaseConfig = {
+            apiKey: "AIzaSyCLtVFMtBFYjKHqsKIk-RFDbEE9B3szs_Q",
+            authDomain: "kanban-board-c7048.firebaseapp.com",
+            projectId: "kanban-board-c7048",
+            storageBucket: "kanban-board-c7048.firebasestorage.app",
+            messagingSenderId: "834915286423",
+            appId: "1:834915286423:web:043c8d49d0a60568f758d2"
+        };
+
+        const app = initializeApp(firebaseConfig);
+        const db = getFirestore(app);
+        const boardDocRef = doc(db, "kanban", "shared-board");
+
+        let tasks = [];
+        let draggedTaskId = null;
+
+        function listenToTasks() {
+            onSnapshot(boardDocRef, (docSnap) => {
+                if (docSnap.exists()) {
+                    tasks = docSnap.data().tasks || [];
+                } else {
+                    tasks = [];
+                }
+                renderTasks();
+            });
+        }
+
+        async function saveTasks() {
+            try {
+                await setDoc(boardDocRef, { tasks: tasks });
+            } catch (error) {
+                console.error('Firebase Error:', error);
             }
-            renderTasks();
-        });
-    }
-
-    // --- SAVE TO CLOUD ---
-    async function saveTasks() {
-        try {
-            await setDoc(boardDocRef, { tasks: tasks });
-        } catch (error) {
-            console.error('Firebase Save Error:', error);
-            alert("Erreur lors de l'enregistrement. Vérifiez vos règles Firebase.");
         }
-    }
 
-    // --- UI FUNCTIONS ---
-    window.openModal = function() {
-        document.getElementById('modalTitle').textContent = 'Nouvelle tâche';
-        document.getElementById('submitBtn').textContent = 'Créer';
-        document.getElementById('taskForm').reset();
-        document.getElementById('taskId').value = '';
-        document.getElementById('taskStatus').parentElement.style.display = 'none';
-        document.getElementById('taskModal').classList.add('active');
-    };
+        window.openModal = function() {
+            document.getElementById('taskForm').reset();
+            document.getElementById('taskId').value = '';
+            document.getElementById('modalTitle').textContent = 'Nouvelle tâche';
+            document.getElementById('statusGroup').style.display = 'none';
+            document.getElementById('taskModal').classList.add('active');
+        };
 
-    window.closeModal = function() {
-        document.getElementById('taskModal').classList.remove('active');
-    };
+        window.closeModal = function() {
+            document.getElementById('taskModal').classList.remove('active');
+        };
 
-    window.deleteTask = function(id) {
-        if (confirm('Supprimer cette tâche ?')) {
-            tasks = tasks.filter(t => t.id !== id);
-            saveTasks();
+        window.deleteTask = function(id) {
+            if (confirm('Supprimer ?')) {
+                tasks = tasks.filter(t => t.id !== id);
+                saveTasks();
+            }
+        };
+
+        function openEditModal(taskId) {
+            const task = tasks.find(t => t.id === taskId);
+            if (!task) return;
+            document.getElementById('taskId').value = task.id;
+            document.getElementById('taskTitle').value = task.title;
+            document.getElementById('taskDescription').value = task.description;
+            document.getElementById('taskAuthor').value = task.author;
+            document.getElementById('taskStatus').value = task.status;
+            document.getElementById('statusGroup').style.display = 'block';
+            document.getElementById('modalTitle').textContent = 'Modifier';
+            document.getElementById('taskModal').classList.add('active');
         }
-    };
 
-    function openEditModal(taskId) {
-        const task = tasks.find(t => t.id === taskId);
-        if (!task) return;
-
-        document.getElementById('modalTitle').textContent = 'Modifier la tâche';
-        document.getElementById('submitBtn').textContent = 'Enregistrer';
-        document.getElementById('taskId').value = task.id;
-        document.getElementById('taskTitle').value = task.title;
-        document.getElementById('taskDescription').value = task.description;
-        document.getElementById('taskAuthor').value = task.author;
-        document.getElementById('taskStatus').value = task.status;
-        document.getElementById('taskStatus').parentElement.style.display = 'block';
-        document.getElementById('taskModal').classList.add('active');
-    }
-
-    // --- FORM SUBMISSION ---
-    document.getElementById('taskForm').addEventListener('submit', function(e) {
-        e.preventDefault();
-        const taskId = document.getElementById('taskId').value;
-        
-        if (taskId) {
-            const task = tasks.find(t => t.id === parseInt(taskId));
-            if (task) {
+        document.getElementById('taskForm').addEventListener('submit', function(e) {
+            e.preventDefault();
+            const id = document.getElementById('taskId').value;
+            if (id) {
+                const task = tasks.find(t => t.id === parseInt(id));
                 task.title = document.getElementById('taskTitle').value;
                 task.description = document.getElementById('taskDescription').value;
                 task.author = document.getElementById('taskAuthor').value || 'Anonyme';
                 task.status = document.getElementById('taskStatus').value;
+            } else {
+                tasks.push({
+                    id: Date.now(),
+                    title: document.getElementById('taskTitle').value,
+                    description: document.getElementById('taskDescription').value,
+                    author: document.getElementById('taskAuthor').value || 'Anonyme',
+                    status: 'todo',
+                    createdAt: new Date().toLocaleDateString('fr-FR')
+                });
             }
-        } else {
-            const task = {
-                id: Date.now(),
-                title: document.getElementById('taskTitle').value,
-                description: document.getElementById('taskDescription').value,
-                author: document.getElementById('taskAuthor').value || 'Anonyme',
-                status: 'todo',
-                createdAt: new Date().toLocaleDateString('fr-FR')
-            };
-            tasks.push(task);
-        }
-        saveTasks();
-        closeModal();
-    });
-
-    // --- RENDERING ---
-    function renderTasks() {
-        document.querySelectorAll('.tasks-container').forEach(container => container.innerHTML = '');
-
-        tasks.forEach(task => {
-            const taskEl = document.createElement('div');
-            taskEl.className = 'task';
-            taskEl.draggable = true;
-            taskEl.dataset.id = task.id;
-            taskEl.innerHTML = `
-                <div class="task-title">${task.title}</div>
-                ${task.description ? `<div class="task-description">${task.description}</div>` : ''}
-                <div class="task-meta">
-                    <span>👤 ${task.author} • ${task.createdAt}</span>
-                    <button class="delete-btn" onclick="event.stopPropagation(); window.deleteTask(${task.id})">🗑️</button>
-                </div>
-            `;
-
-            taskEl.addEventListener('click', (e) => {
-                if (!e.target.classList.contains('delete-btn')) {
-                    openEditModal(parseInt(taskEl.dataset.id));
-                }
-            });
-
-            taskEl.addEventListener('dragstart', function() {
-                draggedTaskId = parseInt(this.dataset.id);
-                this.classList.add('dragging');
-            });
-
-            taskEl.addEventListener('dragend', function() {
-                this.classList.remove('dragging');
-            });
-
-            const container = document.querySelector(`[data-status="${task.status}"] .tasks-container`);
-            if (container) container.appendChild(taskEl);
+            saveTasks();
+            closeModal();
         });
-        setupDropZones();
-    }
 
-    function setupDropZones() {
+        function renderTasks() {
+            document.querySelectorAll('.tasks-container').forEach(c => c.innerHTML = '');
+            tasks.forEach(task => {
+                const el = document.createElement('div');
+                el.className = 'task';
+                el.draggable = true;
+                el.innerHTML = `
+                    <div class="task-title">${task.title}</div>
+                    <div style="font-size:14px;color:#666">${task.description || ''}</div>
+                    <div class="task-meta">
+                        <span>👤 ${task.author}</span>
+                        <button class="delete-btn" onclick="event.stopPropagation(); window.deleteTask(${task.id})">🗑️</button>
+                    </div>`;
+                el.onclick = () => openEditModal(task.id);
+                el.ondragstart = () => { draggedTaskId = task.id; el.classList.add('dragging'); };
+                el.ondragend = () => el.classList.remove('dragging');
+                
+                const container = document.querySelector(`[data-status="${task.status}"] .tasks-container`);
+                if (container) container.appendChild(el);
+            });
+        }
+
         document.querySelectorAll('.tasks-container').forEach(container => {
             container.ondragover = (e) => e.preventDefault();
-            container.ondrop = function(e) {
-                e.preventDefault();
-                if (draggedTaskId) {
-                    const newStatus = this.parentElement.dataset.status;
-                    const task = tasks.find(t => t.id === draggedTaskId);
-                    if (task && task.status !== newStatus) {
-                        task.status = newStatus;
-                        saveTasks();
-                    }
+            container.ondrop = () => {
+                const task = tasks.find(t => t.id === draggedTaskId);
+                const newStatus = container.parentElement.dataset.status;
+                if (task && task.status !== newStatus) {
+                    task.status = newStatus;
+                    saveTasks();
                 }
             };
         });
-    }
 
-    // Initialize
-    listenToTasks();
-</script>
+        listenToTasks();
+    </script>
+</body>
+</html>
